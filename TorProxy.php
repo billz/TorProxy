@@ -80,15 +80,7 @@ class TorProxy implements PluginInterface
             if (!RASPI_MONITOR_ENABLED) {
                 if (isset($_POST['saveSettings'])) {
                     $return = $this->persistConfig($status, $_POST, $this->torConfig);
-                    $status->addMessage('Restarting '.$this->serviceName, 'info');
-                    exec('sudo /bin/systemctl restart '.$this->serviceName, $output, $return);
-                    if ($return == 0) {
-                        $status->addMessage('Successfully restarted '.$this->serviceName, 'success');
-                        $this->setServiceStatus('up');
-                    } else {
-                        $status->addMessage('Failed to start '.$this->serviceName, 'danger');
-                        $this->setServiceStatus('down');
-                    }
+                    $status->addMessage('Restart the Tor service for your changes to take effect', 'info');
                 } elseif (isset($_POST['startTorService'])) {
                     $status->addMessage('Attempting to start '.$this->serviceName, 'info');
                     exec('sudo /bin/systemctl start '.$this->serviceName, $output, $return);
@@ -122,14 +114,17 @@ class TorProxy implements PluginInterface
                 }
             }
 
-            // Parse the current Tor configuration
+            // parse current Tor configuration
             $config = $this->parseConfig($this->torConfig);
 
-            // override default config values
-            $ipv4Address = $this->getInterfaceIPv4($this->netInterface);
-            $subnet = $this->getInterfaceSubnet($this->netInterface);
-            if (isset($ipv4Address)) { $config['SocksPortIP'] = $ipv4Address; }
-            if (isset($subnet)) { $config['SocksPolicy'] = 'accept '.$subnet; }
+            // get default network interface settings
+            $ipv4Address = $this->getInterfaceIPv4($this->netInterface) ?? '127.0.0.1';
+            $subnet = $this->getInterfaceSubnet($this->netInterface) ?? '192.168.1.0/24';
+            $policy = 'accept '.$subnet;
+
+            // override config settings if empty
+            $config['SocksPortIP'] = !empty($config['SocksPortIP']) ? $config['SocksPortIP'] : $ipv4Address;
+            $config['SocksPolicy'] = !empty($config['SocksPolicy']) ? $config['SocksPolicy'] : $policy;
 
             // Populate template data
             $__template_data = [
