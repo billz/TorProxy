@@ -25,6 +25,7 @@ class TorProxy implements PluginInterface
     private string $label;
     private string $icon;
     private string $torConfig;
+    private string $netInterface;
     private string $serviceStatus;
 
     public function __construct(string $pluginPath, string $pluginName)
@@ -36,6 +37,7 @@ class TorProxy implements PluginInterface
         $this->icon = 'fas fa-lemon'; //'ra-onion';
         $this->serviceName = 'tor@default.service';
         $this->torConfig = '/etc/tor/torrc';
+        $this->netInterface = 'eth0';
         $this->serviceStatus = $this->getServiceStatus();
 
         if ($loaded = self::loadData()) {
@@ -77,11 +79,16 @@ class TorProxy implements PluginInterface
 
             if (!RASPI_MONITOR_ENABLED) {
                 if (isset($_POST['saveSettings'])) {
-                    if (isset($_POST['interface'])) {
-                        $return = $this->persistConfig($status, $_POST);
-                        $status->addMessage('Restarting '.$this->serviceName, 'info');
+                    $return = $this->persistConfig($status, $_POST, $this->torConfig);
+                    $status->addMessage('Restarting '.$this->serviceName, 'info');
+                    exec('sudo /bin/systemctl restart '.$this->serviceName, $output, $return);
+                    if ($return == 0) {
+                        $status->addMessage('Successfully restarted '.$this->serviceName, 'success');
+                        $this->setServiceStatus('up');
+                    } else {
+                        $status->addMessage('Failed to start '.$this->serviceName, 'danger');
+                        $this->setServiceStatus('down');
                     }
-
                 } elseif (isset($_POST['startTorService'])) {
                     $status->addMessage('Attempting to start '.$this->serviceName, 'info');
                     exec('sudo /bin/systemctl start '.$this->serviceName, $output, $return);
@@ -92,7 +99,6 @@ class TorProxy implements PluginInterface
                         $status->addMessage('Failed to start '.$this->serviceName, 'danger');
                         $this->setServiceStatus('down');
                     }
-
                 } elseif (isset($_POST['restartTorService'])) {
                     $status->addMessage('Attempting to restart '.$this->serviceName, 'info');
                     exec('sudo /bin/systemctl restart '.$this->serviceName, $output, $return);
@@ -117,7 +123,13 @@ class TorProxy implements PluginInterface
             }
 
             // Parse the current Tor configuration
-            $config = $this->parseConfig();
+            $config = $this->parseConfig($this->torConfig);
+
+            // override default config values
+            $ipv4Address = $this->getInterfaceIPv4($this->netInterface);
+            $subnet = $this->getInterfaceSubnet($this->netInterface);
+            if (isset($ipv4Address)) { $config['SocksPortIP'] = $ipv4Address; }
+            if (isset($subnet)) { $config['SocksPolicy'] = 'accept '.$subnet; }
 
             // Populate template data
             $__template_data = [
@@ -182,107 +194,173 @@ class TorProxy implements PluginInterface
 
     /**
      * Returns the current Tor configuration
+     *
+     * @param string $cfgPath
      * @return array $arrConfig
      */
-    public function parseConfig()
+    public function parseConfig($cfgPath): array
     {
+        if (!is_readable($cfgPath)) {
+            throw new \RuntimeException("Cannot read Tor config file at: $cfgPath");
+        }
+
         $arrConfig = [];
-        exec('cat ' . escapeshellarg($this->danteConfig), $cfg);
+        $lines = file($cfgPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
-        $blockKey = null;
-        $blockLines = []; // accumulate block lines
+        foreach ($lines as $line) {
+            $trimmed = ltrim($line);
 
-        foreach ($cfg as $line) {
-            // skip empty lines or comments
-            $line = trim($line);
-            if (strlen($line) === 0 || $line[0] === '#') {
+            if ($trimmed === '' || str_starts_with($trimmed, '#')) {
                 continue;
             }
 
-            // block start
-            if (preg_match('/^(client|socks)\s+pass\s*\{$/', $line, $matches)) {
-                $blockKey = $matches[1] . '_pass';
-                $blockLines = [];
-                continue;
-            }
+            // strip comments
+            $lineSansComment = preg_replace('/\s+#.*/', '', $trimmed);
 
-            // block end
-            if ($blockKey && $line === '}') {
-                $arrConfig[$blockKey] = $blockLines;
-                $blockKey = null;
-                $blockLines = [];
-                continue;
-            }
-
-            // accumulate block lines
-            if (preg_match('/^([^:]+):(.*)$/', $line, $matches)) {
-            $key = trim($matches[1]);
-            $value = trim($matches[2]);
-
-            // split internal address and port
-            if ($key === 'internal' && preg_match('/^([\d\.]+)\s+port=(\d+)$/', $value, $internalMatches)) {
-                    $arrConfig['internal_addr'] = $internalMatches[1];
-                    $arrConfig['internal_port'] = $internalMatches[2];
-                } else {
-                    $arrConfig[$key] = $value;
-                }
-            } elseif (preg_match('/^([^=]+)=(.*)$/', $line, $matches)) {
-                $key = trim($matches[1]);
+            // match key-value pairs
+            if (preg_match('/^([A-Za-z][A-Za-z0-9]*)\s+(.*)$/', $lineSansComment, $matches)) {
+                $key = $matches[1];
                 $value = trim($matches[2]);
-                $arrConfig[$key] = $value;
+
+                // parse SocksPort values
+                if ($key === 'SocksPort' && preg_match('/^([\d\.]+):(\d+)$/', $value, $addrMatch)) {
+                    $config['SocksPortIP'] = $addrMatch[1];
+                    $config['SocksPort'] = (int)$addrMatch[2];
+                } else {
+                    if (isset($config[$key])) {
+                        if (is_array($config[$key])) {
+                            $config[$key][] = $value;
+                        } else {
+                            $config[$key] = [$config[$key], $value];
+                        }
+                    } else {
+                        $config[$key] = $value;
+                    }
+                }
             }
         }
-        return $arrConfig;
+        return $config;
     }
 
-    /* Persists the Tor configuration
+
+    /**
+     * Safely updates the Tor config, preserving comments
      *
      * @param object $status
-     * @param object $post
+     * @param array $post
+     * @return object
      */
-    public function persistConfig($status, $post)
+    public function persistConfig($status, $post, $torrcPath)
     {
-        $status->addMessage('Saving Tor Proxy settings', 'info');
+        $status->addMessage('Attempting to save Tor Proxy settings', 'info');
+        $directives = [
+            'SocksPort' => "{$post['txtinternal']}:{$post['txtport']}",
+            'SocksPolicy' => "{$post['txtpolicy']}",
+            'RunAsDaemon' => '1',
+            'CookieAuthentication' => '1',
+            'DataDirectory' => '/var/lib/tor',
+            'ControlPort' => "{$post['txtcontrolport']}"
+        ];
 
-        $content = <<<CONFIG
-        logoutput: syslog
-        user.privileged: {$post['txtuserprivileged']}
-        user.unprivileged: {$post['txtuserunprivileged']}
+        $existing = file_exists($torrcPath) ? file($torrcPath, FILE_IGNORE_NEW_LINES) : [];
+        $output = [];
+        $seen = array_fill_keys(array_keys($directives), false);
 
-        # The listening network interface or address.
-        internal: {$post['txtinternal']} port={$post['txtport']}
+        foreach ($existing as $line) {
+            $trimmed = trim($line);
+            $matched = false;
 
-        # The proxying network interface or address.
-        external: {$post['interface']}
-
-        # socks-rules determine what is proxied through the external interface.
-        socksmethod: {$post['txtsocksmethod']}
-
-        # client-rules determine who can connect to the internal interface.
-        clientmethod: {$post['txtclientmethod']}
-
-        client pass {
-            from: {$post['txtclientip']}
+            foreach ($directives as $key => $value) {
+                if (preg_match("/^$key\b/i", $trimmed)) {
+                    $output[] = "$key $value";
+                    $seen[$key] = true;
+                    $matched = true;
+                    break;
+                }
+            }
+            if (!$matched) {
+                $output[] = $line;
+            }
         }
-        socks pass {
-            from: 0.0.0.0/0 to: 0.0.0.0/0
-        }
 
-        CONFIG;
+        // append directives if missing
+        foreach ($directives as $key => $value) {
+            if (!$seen[$key]) {
+                $output[] = "$key $value";
+            }
+        }
 
         try {
-            file_put_contents('/tmp/torrc', $content);
-            system('sudo cp /tmp/torrc ' .$this->torConfig, $result);
-            if ($result == 0) {
-                $status->addMessage('Tor configuration saved successfully to '.$this->torConfig, 'success');
+            file_put_contents('/tmp/torrc', implode(PHP_EOL, $output) . PHP_EOL);
+            system('sudo cp /tmp/torrc ' . escapeshellarg($torrcPath), $result);
+
+            if ($result === 0) {
+                $status->addMessage("Tor configuration saved successfully to {$torrcPath}", 'success');
             } else {
-                $status->addMessage('Failed to save Tor configuration to '.$this->torConfig, 'error');
+                $status->addMessage("Failed to save Tor configuration to {$torrcPath}", 'error');
             }
         } catch (\Exception $e) {
-            $status->addMessage('Failed to save Tor configuration: ' .$e->getMessage(), 'error');
+            $status->addMessage("Failed to write Tor configuration: " . $e->getMessage(), 'error');
+        }
+        return $status;
+    }
+
+    /**
+     * Retrieves the subnet for a given network interface
+     *
+     * @param string $interface
+     * @return string|null if not found
+     */
+    public function getInterfaceSubnet($interface): ?string
+    {
+        $output = [];
+        $cmd = "ip -o -f inet addr show ". escapeshellarg($interface) ." 2>/dev/null";
+        exec($cmd, $output);
+
+        if (empty($output)) {
+            return null;
         }
 
-        return $status;
+        foreach ($output as $line) {
+            if (preg_match('/inet (\d+\.\d+\.\d+\.\d+)\/(\d+)/', $line, $matches)) {
+                $ip = $matches[1];
+                $prefix = (int)$matches[2];
+                $subnet = $this->ipToSubnet($ip, $prefix);
+                return "$subnet/$prefix";
+            }
+        }
+        return null;
+
+    }
+
+    private function ipToSubnet(string $ip, int $prefix): string
+    {
+        $ipLong = ip2long($ip);
+        $netmask = -1 << (32 - $prefix);
+        $netmask = $netmask & 0xFFFFFFFF; // ensure unsigned
+        $network = $ipLong & $netmask;
+        return long2ip($network);
+    }
+
+    /**
+     * Retrieves the IPv4 address for a given network interface
+     *
+     * @param string $interface
+     * @return string|null Returns the IP address or null if not found
+     */
+    public function getInterfaceIPv4(string $interface): ?string
+    {
+        $output = [];
+        $cmd = "ip -o -f inet addr show " . escapeshellarg($interface) . " 2>/dev/null";
+        exec($cmd, $output);
+
+        foreach ($output as $line) {
+            if (preg_match('/inet (\d+\.\d+\.\d+\.\d+)\//', $line, $matches)) {
+                return $matches[1];
+            }
+        }
+
+        return null;
     }
 
     /**
