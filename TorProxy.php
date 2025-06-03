@@ -34,7 +34,7 @@ class TorProxy implements PluginInterface
         $this->pluginName = $pluginName;
         $this->templateMain = 'main';
         $this->label = _('Tor Proxy');
-        $this->icon = 'fas fa-lemon'; //'ra-onion';
+        $this->icon = 'ra-torproxy';
         $this->serviceName = 'tor@default.service';
         $this->torConfig = '/etc/tor/torrc';
         $this->netInterface = $this->getDefaultInterface();
