@@ -21,7 +21,7 @@ RaspAP's plugin manager automates installating dependencies, creating a baseline
 ## Configuration
 Baseline Tor settings that will work for most devices are preconfigured by the plugin. The IPv4 address of your device's default network interface is added to the "Network Interface" field. Likewise, the subnet for this interface is used to define the "Socks Policy". 
 
-<img width="385" alt="tor-plugin" src="https://github.com/user-attachments/assets/cbe89dab-e87c-40e2-8142-c076511a3a09" />
+<img width="350" alt="tor-plugin" src="https://github.com/user-attachments/assets/cbe89dab-e87c-40e2-8142-c076511a3a09" />
 
 If you wish to change these values, ensure that they correspond to the default route configured on your device. You can determine this by executing `ip route`:
 
@@ -72,14 +72,14 @@ With the Tor proxy server running, you can configure a browser to use it as a pr
 
 Using Firefox, choose **Settings > Network Settings** and select the **Manual proxy configuration** option.
 
-<img width="640" alt="firefox" src="https://github.com/user-attachments/assets/deb60fd3-be57-4986-8cec-c4e6dbcd9dc3" />
+<img width="540" alt="firefox" src="https://github.com/user-attachments/assets/deb60fd3-be57-4986-8cec-c4e6dbcd9dc3" />
 
 Add your Tor Proxy server's IPv4 address in the "SOCKS Host" field and its corresponding port. Ensure that the "SOCKS v5" option is checked.
 
 ## Verifying your connection
 To verify that your internet traffic is being routed through the Tor network, visit [https://check.torproject.org/](https://check.torproject.org/).
 
-<img width="557" alt="tor-firefox" src="https://github.com/user-attachments/assets/48c4ff2c-e870-439e-8cae-656bff849f94" />
+<img width="540" alt="tor-firefox" src="https://github.com/user-attachments/assets/48c4ff2c-e870-439e-8cae-656bff849f94" />
 
 If instead you see "Sorry. You are not using Tor" check that your browser configuration matches your Tor Proxy server settings.
 
@@ -93,6 +93,6 @@ sudo chmod 755 /run/tor/control.authcookie
 You can then simply execute it with `nyx` (no sudo):
 
 
-<img width="640" alt="tor-nyx" src="https://github.com/user-attachments/assets/d50b9cdb-37c6-49b0-9ab5-9b933dcd2234" />
+<img width="540" alt="tor-nyx" src="https://github.com/user-attachments/assets/d50b9cdb-37c6-49b0-9ab5-9b933dcd2234" />
 
 Use the arrow keys to toggle through the displays. The `m` key opens a menu. Press `q` to quit Nyx.
