@@ -23,7 +23,7 @@
   ],
   "default_locale": "en_US",
   "dependencies": {
-    "dante-server": "0.4.7.16",
+    "tor": "0.4.7.16",
     "nyx": "2.1.0"
   },
   "icon": "fas ra-onion",
