@@ -37,7 +37,7 @@ class TorProxy implements PluginInterface
         $this->icon = 'fas fa-lemon'; //'ra-onion';
         $this->serviceName = 'tor@default.service';
         $this->torConfig = '/etc/tor/torrc';
-        $this->netInterface = 'eth0';
+        $this->netInterface = $this->getDefaultInterface();
         $this->serviceStatus = $this->getServiceStatus();
 
         if ($loaded = self::loadData()) {
@@ -228,6 +228,13 @@ class TorProxy implements PluginInterface
                         } else {
                             $config[$key] = [$config[$key], $value];
                         }
+                        // remove duplicates
+                        $config[$key] = array_unique($config[$key]);
+
+                        // normalize single item arrays
+                        if (count($config[$key]) === 1) {
+                            $config[$key] = $config[$key][0];
+                        }
                     } else {
                         $config[$key] = $value;
                     }
@@ -298,6 +305,24 @@ class TorProxy implements PluginInterface
             $status->addMessage("Failed to write Tor configuration: " . $e->getMessage(), 'error');
         }
         return $status;
+    }
+
+    /**
+     * Determines the default network interface
+     *
+     * @return string|null Interface name or null if not found
+     */
+    public function getDefaultInterface(): ?string
+    {
+        $output = [];
+        exec('ip route 2>/dev/null', $output);
+
+        foreach ($output as $line) {
+            if (strpos($line, 'default') === 0 && preg_match('/\bdev\s+(\w+)/', $line, $matches)) {
+                return $matches[1];
+            }
+        }
+        return null;
     }
 
     /**
