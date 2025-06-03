@@ -4,6 +4,15 @@
 
 This plugin adds Tor proxy server support to RaspAP.
 
+## Contents
+
+ - [Installation](#installation)
+ - [Configuration](#configuration)
+ - [Restarting Tor Proxy](#restarting-tor-proxy)
+ - [Client setup](#client-setup)
+ - [Verifying your connection](#verifying-your-connection)
+ - [Monitoring traffic](#monitoring-traffic)
+
 ## Installation
 Install the Tor proxy plugin from RaspAP's **System > Plugins** tab. Choose **Details** corresponding to the plugin, then **Install now** from the pop-up dialog.
 
@@ -71,6 +80,8 @@ Add your Tor Proxy server's IPv4 address in the "SOCKS Host" field and its corre
 To verify that your internet traffic is being routed through the Tor network, visit [https://check.torproject.org/](https://check.torproject.org/).
 
 <img width="557" alt="tor-firefox" src="https://github.com/user-attachments/assets/48c4ff2c-e870-439e-8cae-656bff849f94" />
+
+If instead you see "Sorry. You are not using Tor" check that your browser configuration matches your Tor Proxy server settings.
 
 ## Monitoring traffic
 You can also monitor Tor proxy traffic on your device by executing `nyx`. The Tor Proxy plugin installs this package for you. First, verify that permissions on the Tor cookie allow Nyx to run without elevated privileges:
