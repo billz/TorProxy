@@ -72,6 +72,7 @@ To verify that your internet traffic is being routed through the Tor network, vi
 
 <img width="557" alt="tor-firefox" src="https://github.com/user-attachments/assets/48c4ff2c-e870-439e-8cae-656bff849f94" />
 
+## Monitoring traffic
 You can also monitor Tor proxy traffic on your device by executing `nyx`. The Tor Proxy plugin installs this package for you. First, verify that permissions on the Tor cookie allow Nyx to run without elevated privileges:
 
 ```
