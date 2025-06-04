@@ -26,6 +26,7 @@ class TorProxy implements PluginInterface
     private string $icon;
     private string $torConfig;
     private string $netInterface;
+    private string $defaultPort;
     private string $serviceStatus;
 
     public function __construct(string $pluginPath, string $pluginName)
@@ -38,6 +39,7 @@ class TorProxy implements PluginInterface
         $this->serviceName = 'tor@default.service';
         $this->torConfig = '/etc/tor/torrc';
         $this->netInterface = $this->getDefaultInterface();
+        $this->defaultPort = 9050;
         $this->serviceStatus = $this->getServiceStatus();
 
         if ($loaded = self::loadData()) {
@@ -117,14 +119,24 @@ class TorProxy implements PluginInterface
             // parse current Tor configuration
             $config = $this->parseConfig($this->torConfig);
 
-            // get default network interface settings
-            $ipv4Address = $this->getInterfaceIPv4($this->netInterface) ?? '127.0.0.1';
-            $subnet = $this->getInterfaceSubnet($this->netInterface) ?? '192.168.1.0/24';
-            $policy = 'accept '.$subnet;
-
-            // override config settings if empty
-            $config['SocksPortIP'] = !empty($config['SocksPortIP']) ? $config['SocksPortIP'] : $ipv4Address;
-            $config['SocksPolicy'] = !empty($config['SocksPolicy']) ? $config['SocksPolicy'] : $policy;
+            /*
+             * Populate a valid intitial tor config, if undefined.
+             * This is done to provide the user with a high-probability
+             * valid Tor configuration when the plugin is first loaded.
+             */
+            if (empty($config['SocksPortIP'])) {
+                // get default network interface settings
+                $ip = $this->getInterfaceIPv4($this->netInterface) ?? '127.0.0.1';
+                $subnet = $this->getInterfaceSubnet($this->netInterface) ?? '192.168.1.0/24';
+                $port = $this->defaultPort; 
+                $defaults = [
+                    'SocksPort' => "$ip:$port",
+                    'SocksPolicy' => "accept $subnet"
+                ];
+                $this->writeDirectives(array_merge($config, $defaults), $this->torConfig);
+                exec('sudo /bin/systemctl restart '.$this->serviceName, $output, $return);
+                $config = $this->parseConfig($this->torConfig); // re-parse updated config
+            }
 
             // Populate template data
             $__template_data = [
@@ -255,6 +267,7 @@ class TorProxy implements PluginInterface
     public function persistConfig($status, $post, $torrcPath)
     {
         $status->addMessage('Attempting to save Tor Proxy settings', 'info');
+
         $directives = [
             'SocksPort' => "{$post['txtinternal']}:{$post['txtport']}",
             'SocksPolicy' => "{$post['txtpolicy']}",
@@ -264,6 +277,24 @@ class TorProxy implements PluginInterface
             'ControlPort' => "{$post['txtcontrolport']}"
         ];
 
+        $success = $this->writeDirectives($directives, $torrcPath);
+
+        $status->addMessage(
+            $success ? "Tor configuration saved successfully to {$torrcPath}" : "Failed to save Tor configuration to {$torrcPath}",
+            $success ? 'success' : 'error'
+        );
+        return $status;
+    }
+
+    /**
+     * Writes specified Tor directives to the config
+     *
+     * @param array $directives
+     * @param string $torrcPath
+     * @return bool
+     */
+    private function writeDirectives(array $directives, string $torrcPath): bool
+    {
         $existing = file_exists($torrcPath) ? file($torrcPath, FILE_IGNORE_NEW_LINES) : [];
         $output = [];
         $seen = array_fill_keys(array_keys($directives), false);
@@ -271,7 +302,6 @@ class TorProxy implements PluginInterface
         foreach ($existing as $line) {
             $trimmed = trim($line);
             $matched = false;
-
             foreach ($directives as $key => $value) {
                 if (preg_match("/^$key\b/i", $trimmed)) {
                     $output[] = "$key $value";
@@ -284,8 +314,6 @@ class TorProxy implements PluginInterface
                 $output[] = $line;
             }
         }
-
-        // append directives if missing
         foreach ($directives as $key => $value) {
             if (!$seen[$key]) {
                 $output[] = "$key $value";
@@ -294,18 +322,12 @@ class TorProxy implements PluginInterface
 
         try {
             file_put_contents('/tmp/torrc', implode(PHP_EOL, $output) . PHP_EOL);
-            system('sudo cp /tmp/torrc ' . escapeshellarg($torrcPath), $result);
-
-            if ($result === 0) {
-                $status->addMessage("Tor configuration saved successfully to {$torrcPath}", 'success');
-            } else {
-                $status->addMessage("Failed to save Tor configuration to {$torrcPath}", 'error');
-            }
+            return system('sudo cp /tmp/torrc ' . escapeshellarg($torrcPath)) === 0;
         } catch (\Exception $e) {
-            $status->addMessage("Failed to write Tor configuration: " . $e->getMessage(), 'error');
+            return false;
         }
-        return $status;
     }
+
 
     /**
      * Determines the default network interface
