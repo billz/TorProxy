@@ -35,7 +35,7 @@ In this example, `eth0` is the interface associated with the default route and `
 If you have services listening on Tor's default Socks port (`9050`) or Control port (`9051`) you may change these values to alternate ports. The "Daemon Mode", "Authentication method" and "Data directory" settings are read-only. 
 
 ## Restarting Tor Proxy
-If you've modified any of the default settings, you must choose **Restart Tor service** for the changes to take effect. After a moment, check the **Status** tab. Example output of a working `tor@default.service` is shown below:
+If you've modified any of the default settings, you must choose **Restart Tor service** for the changes to take effect. Tor usually takes a few seconds to establish a circuit with a relay. Check the **Status** tab to see its progress. Example output of a working `tor@default.service` is shown below:
 
 ```
 ● tor@default.service - Anonymizing overlay network for TCP
