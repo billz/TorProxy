@@ -1,6 +1,6 @@
 {
   "name": "Tor Proxy",
-  "version": "v1.0.0",
+  "version": "v1.1.0",
   "description": "A Tor proxy server add-on for RaspAP",
   "author": "Bill Zimmerman",
   "author_uri": "https://github.com/billz",
