@@ -23,7 +23,9 @@ Baseline Tor settings that will work for most devices are preconfigured by the p
 
 <img width="350" alt="tor-plugin" src="https://github.com/user-attachments/assets/cbe89dab-e87c-40e2-8142-c076511a3a09" />
 
-If you wish to change these values, ensure that they correspond to the default route configured on your device. You can determine this by executing `ip route`:
+If you wish to change these values, ensure that they correspond to the default route configured on your device. You can obtain this from RaspAP's **Networking > Summary** tab. Use the **IP Address** value that appears under **Internet connection**. This indicates the primary source of internet connectivity for your device.
+
+Alternatively, you can determine this by executing `ip route`:
 
 ```
 $ ip route
