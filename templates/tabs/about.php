@@ -1,6 +1,6 @@
 <!-- about tab -->
 <div class="tab-pane fade" id="pluginabout">
-  <h4 class="mt-3 mb-3"><?php echo _("About SocksProxy") ;?></h4>
+  <h4 class="mt-3 mb-3"><?php echo _("About ").$__template_data['title'] ;?></h4>
   <div class="col-12 mb-2">
     <code><?php echo $__template_data['pluginName']; ?></code> <?php echo _("was created by ") . $__template_data['author']; ?>.
   </div>
